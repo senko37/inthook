@@ -8,11 +8,19 @@
 namespace inthook {
 	UCHAR original_call[]{
 #ifdef _WIN64
-		0x48, 0x89, 0xCE,                                           // mov rsi, rcx
+		0x51,                                                       // push rcx
+		0x52,                                                       // push rdx
+		0x41, 0x50,                                                 // push r8
+		0x41, 0x51,                                                 // push r9
+		0x50,                                                       // push rax
 		0x48, 0xB9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rcx, function
 		0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rax, inthook::ignore
 		0xFF, 0xD0,                                                 // call rax
-		0x48, 0x89, 0xF1,                                           // mov rcx, rsi
+		0x58,                                                       // pop rax
+		0x41, 0x59,                                                 // pop r9
+		0x41, 0x58,                                                 // pop r8
+		0x5A,                                                       // pop rdx
+		0x59,                                                       // pop rcx
 		0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rax, function
 		0xFF, 0xE0                                                  // jmp rax
 #elif _WIN32
@@ -85,9 +93,9 @@ namespace inthook {
 			return 0;
 		memcpy(address, &original_call, sizeof(original_call));
 #ifdef _WIN64
-		*(DWORD64*)((DWORD64)address + 5) = (DWORD64)function;
-		*(DWORD64*)((DWORD64)address + 15) = (DWORD64)inthook::ignore;
-		*(DWORD64*)((DWORD64)address + 30) = (DWORD64)function;
+		*(DWORD64*)((DWORD64)address + 9) = (DWORD64)function;
+		*(DWORD64*)((DWORD64)address + 19) = (DWORD64)inthook::ignore;
+		*(DWORD64*)((DWORD64)address + 38) = (DWORD64)function;
 #elif _WIN32
 		*(DWORD*)((DWORD)address + 1) = (DWORD)function;
 		*(DWORD*)((DWORD)address + 6) = (DWORD)inthook::ignore;
