@@ -4,7 +4,27 @@
 
 #define INT3 0xCC
 
+// todo: fix x64
 namespace inthook {
+	UCHAR original_call[]{
+#ifdef _WIN64
+		0x48, 0x89, 0xCE,                                           // mov rsi, rcx
+		0x48, 0xB9, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rcx, function
+		0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rax, inthook::ignore
+		0xFF, 0xD0,                                                 // call rax
+		0x48, 0x89, 0xF1,                                           // mov rcx, rsi
+		0x48, 0xB8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // mov rax, function
+		0xFF, 0xE0                                                  // jmp rax
+#elif _WIN32
+		0x68, 0x00, 0x00, 0x00, 0x00, // push function
+		0xB8, 0xFF, 0xFF, 0xFF, 0xFF, // mov eax, inthook::ignore
+		0xFF, 0xD0,                   // call eax
+		0x58,                         // pop eax
+		0xB8, 0x00, 0x00, 0x00, 0x00, // mov eax, function 
+		0xFF, 0xE0                    // jmp eax
+#endif
+	};
+
 	struct info {
 		PVOID function;
 		PVOID hook;
@@ -49,13 +69,44 @@ namespace inthook {
 		return EXCEPTION_CONTINUE_SEARCH;
 	}
 
-	bool create(void* function, void* hook) {
+	bool ignore(void* function) {
+		for (info& cur : hooks) {
+			if (function != cur.function && cur.disabled)
+				continue;
+			cur.ignore = true;
+			return true;
+		}
+		return false;
+	}
+
+	void* original(void* function) {
+		void* address = VirtualAlloc(0, sizeof(original_call), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
+		if (!address)
+			return 0;
+		memcpy(address, &original_call, sizeof(original_call));
+#ifdef _WIN64
+		*(DWORD64*)((DWORD64)address + 5) = (DWORD64)function;
+		*(DWORD64*)((DWORD64)address + 15) = (DWORD64)inthook::ignore;
+		*(DWORD64*)((DWORD64)address + 30) = (DWORD64)function;
+#elif _WIN32
+		*(DWORD*)((DWORD)address + 1) = (DWORD)function;
+		*(DWORD*)((DWORD)address + 6) = (DWORD)inthook::ignore;
+		*(DWORD*)((DWORD)address + 14) = (DWORD)function;
+#endif
+		return address;
+	}
+
+	bool create(void* function, void* hook, void* &original) {
 		info new_hook = { function, hook };
 		if (!VirtualProtect(new_hook.function, 0x1, PAGE_EXECUTE_READWRITE, &new_hook.old_protect))
 			return false;
 
 		new_hook.old_byte = *(UCHAR*)new_hook.function;
 		*(UCHAR*)new_hook.function = INT3; // set int3 byte
+
+		original = inthook::original(new_hook.function);
+		if (!original)
+			return false;
 
 		hooks.push_back(new_hook);
 		return true;
@@ -69,16 +120,6 @@ namespace inthook {
 			*(UCHAR*)cur.function = cur.old_byte; // set original byte
 			VirtualProtect(cur.function, 0x1, cur.old_protect, &unused); // set original protect
 			cur.disabled = true;
-			return true;
-		}
-		return false;
-	}
-
-	bool ignore(void* function) {
-		for (info& cur : hooks) {
-			if (function != cur.function && cur.disabled)
-				continue;
-			cur.ignore = true;
 			return true;
 		}
 		return false;

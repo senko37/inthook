@@ -1,19 +1,19 @@
 #include <iostream>
-#include <Windows.h>
 #include "inthook.hpp"
 
+typedef int (WINAPI* tMessageBoxA)(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType);
+tMessageBoxA oMessageBoxA;
 
 int WINAPI hMessageBoxA(HWND hWnd, LPCSTR lpText, LPCSTR lpCaption, UINT uType) {
     printf(":)");
-    inthook::ignore(MessageBoxA);
-    return MessageBoxA(hWnd, "hooked", lpCaption, MB_ICONWARNING | uType);
+    return oMessageBoxA(hWnd, "hooked", lpCaption, MB_ICONWARNING | uType);
 }
 
 int main() {
     if (!inthook::init()) 
         return 1;
 
-    if (!inthook::create(MessageBoxA, hMessageBoxA))
+    if (!inthook::create(MessageBoxA, &hMessageBoxA, reinterpret_cast<void*&>(oMessageBoxA)))
         return 2;
 
     MessageBoxA(0, "hello world", "hello world", MB_OK);
