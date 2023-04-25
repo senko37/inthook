@@ -4,7 +4,6 @@
 
 #define INT3 0xCC
 
-// todo: fix x64
 namespace inthook {
 	UCHAR original_call[]{
 #ifdef _WIN64
@@ -36,6 +35,7 @@ namespace inthook {
 	struct info {
 		PVOID function;
 		PVOID hook;
+		PVOID original;
 		UCHAR old_byte;
 		DWORD old_protect;
 		BOOL ignore;
@@ -87,7 +87,7 @@ namespace inthook {
 		return false;
 	}
 
-	void* original(void* function) {
+	void* original(void* function) {	
 		void* address = VirtualAlloc(0, sizeof(original_call), MEM_COMMIT | MEM_RESERVE, PAGE_EXECUTE_READWRITE);
 		if (!address)
 			return 0;
@@ -112,9 +112,10 @@ namespace inthook {
 		new_hook.old_byte = *(UCHAR*)new_hook.function;
 		*(UCHAR*)new_hook.function = INT3; // set int3 byte
 
-		original = inthook::original(new_hook.function);
-		if (!original)
+		new_hook.original = inthook::original(new_hook.function);
+		if (!new_hook.original)
 			return false;
+		original = new_hook.original;
 
 		hooks.push_back(new_hook);
 		return true;
@@ -127,6 +128,7 @@ namespace inthook {
 				continue;
 			*(UCHAR*)cur.function = cur.old_byte; // set original byte
 			VirtualProtect(cur.function, 0x1, cur.old_protect, &unused); // set original protect
+			VirtualFree(cur.original, NULL, MEM_RELEASE);
 			cur.disabled = true;
 			return true;
 		}
@@ -145,6 +147,7 @@ namespace inthook {
 				continue;
 			*(UCHAR*)cur.function = cur.old_byte; // set original byte
 			VirtualProtect(cur.function, 0x1, cur.old_protect, &unused); // set original protect
+			VirtualFree(cur.original, NULL, MEM_RELEASE);
 			cur.disabled = true;
 		}
 		hooks.clear();
